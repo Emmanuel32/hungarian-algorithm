@@ -1,0 +1,10 @@
+[package]
+name = "hungarian-algorithm"
+version = "0.1.0"
+authors = ["Emmanuel Allen"]
+edition = "2018"
+
+[dependencies]
+ndarray = "0.12.*"
+bit-vec = "0.6"
+rand = "0.7"
