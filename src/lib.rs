@@ -27,7 +27,7 @@ pub fn hungarian_algorithum(mut data: Array2<i32>) -> Vec<(usize, usize)> {
         };
         row -= minimum;
     }
-    // If it's a square matrix also reduce each collum by it's minimum value
+    // If it's a square matrix also reduce each column by it's minimum value
     if rows == cols {
         for mut col in data.axis_iter_mut(Axis(1)) {
             let minimum = match col.iter().min() {
@@ -103,7 +103,7 @@ pub fn hungarian_algorithum(mut data: Array2<i32>) -> Vec<(usize, usize)> {
                     covered_cols.clear();
                     covered_rows.clear();
 
-                    // Cover all collums containing an assigned_zeros
+                    // Cover all columns containing an assigned_zeros
                     for &col in assigned_zeros.iter() {
                         if col != cols {
                             covered_cols.set(col, true)
@@ -132,7 +132,7 @@ pub fn hungarian_algorithum(mut data: Array2<i32>) -> Vec<(usize, usize)> {
         }
         // If there are no uncovered zeros reduce all uncovered values
         // by the minimum uncovered value and add the minimum uncovered
-        // value to all the elements in both a covered row and collum
+        // value to all the elements in both a covered row and column
         if !did_change {
             reduce(&mut data, (&covered_rows, &covered_cols));
             // keep all assigned_zeros covers and primes the same
