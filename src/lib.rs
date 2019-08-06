@@ -7,12 +7,16 @@ use ndarray::*;
 
 /// Preforms the hungarian algorithum on a matrix of costs to find
 /// the assignment with the minimal overall cost.
-pub fn hungarian_algorithum(mut data: Array2<i32>) -> Vec<usize> {
+pub fn hungarian_algorithum(mut data: Array2<i32>) -> Vec<(usize, usize)> {
+    // TODO: check for max - min = overflow
+
     let (tmp_rows, tmp_cols) = data.dim();
     // Resape the matrix so cols >= rows
+    let mut is_reversed = false;
     if tmp_cols < tmp_rows {
         // to optimize maybe impliment a real transpose function
         data = data.reversed_axes();
+        is_reversed = true;
     }
     let (rows, cols) = data.dim();
     // Reduce each row by it's minimum value
@@ -50,7 +54,15 @@ pub fn hungarian_algorithum(mut data: Array2<i32>) -> Vec<usize> {
     // Check if compleated
     let mut assignments_left = rows - covered_cols.iter().filter(|x| *x).count();
     if assignments_left == 0 {
-        return assigned_zeros;
+        let mut output = Vec::new();
+        for (row, &col) in assigned_zeros.iter().enumerate() {
+            if is_reversed {
+                output.push((col, row));
+            } else {
+                output.push((row, col))
+            }
+        }
+        return output;
     }
 
     let mut did_change = false;
@@ -100,7 +112,15 @@ pub fn hungarian_algorithum(mut data: Array2<i32>) -> Vec<usize> {
                     // Check if compleated
                     assignments_left -= 1;
                     if assignments_left == 0 {
-                        return assigned_zeros;
+                        let mut output = Vec::new();
+                        for (row, &col) in assigned_zeros.iter().enumerate() {
+                            if is_reversed {
+                                output.push((col, row));
+                            } else {
+                                output.push((row, col))
+                            }
+                        }
+                        return output;
                     }
                     continue 'main_loop;
                 } else {
@@ -153,16 +173,17 @@ fn reduce(data: &mut Array2<i32>, (covered_rows, covered_cols): (&BitVec, &BitVe
 mod tests {
     use super::*;
 
-    fn get_cost(data: &Array2<i32>, assigned_cells: Vec<usize>) -> i32 {
+    // add support for large numbers
+    fn get_cost(data: &Array2<i32>, assigned_cells: Vec<(usize, usize)>) -> i32 {
         let mut cost: i32 = 0;
-        for (row, &col) in assigned_cells.iter().enumerate() {
+        for (row, col) in assigned_cells {
             cost += data[[row, col]];
         }
         cost
     }
 
     #[test]
-    fn large_test() {
+    fn test1() {
         let test_data: Array2<i32> = array![
             [59, 34, 46, 36, 41, 89, 20, 71, 15, 50],
             [78, 12, 44, 9, 61, 13, 62, 43, 84, 97],
@@ -181,10 +202,22 @@ mod tests {
     }
 
     #[test]
-    fn test_massive() {
-        let test_data = Array2::from_shape_fn([1000, 1000], |_| rand::random::<u16>() as i32);
-        let mut result = hungarian_algorithum(test_data);
-        result.sort();
-        println!("{:?}", result);
+    fn test2() {
+        let test_data: Array2<i32> = array![
+            [13, 76, 34, 92, 65, 6, 32, 24, 82],
+            [64, 88, 44, 54, 14, 7, 8, 62, 78],
+            [35, 39, 68, 3, 30, 4, 86, 42, 1],
+            [53, 21, 31, 52, 78, 76, 9, 5, 69],
+            [87, 51, 7, 96, 49, 91, 19, 33, 38],
+            [21, 49, 26, 73, 4, 96, 42, 31, 13],
+            [44, 62, 3, 58, 69, 53, 72, 92, 18],
+            [36, 3, 59, 95, 83, 49, 21, 25, 19],
+            [33, 7, 93, 43, 68, 18, 9, 91, 38],
+            [19, 38, 78, 23, 18, 9, 23, 42, 32]
+        ];
+        let expected_result = 68;
+        print!("{:?}", hungarian_algorithum(test_data.clone()));
+        let test_result = get_cost(&test_data, hungarian_algorithum(test_data.clone()));
+        assert_eq!(expected_result, test_result);
     }
 }
