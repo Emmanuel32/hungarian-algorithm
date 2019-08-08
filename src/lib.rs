@@ -1,5 +1,6 @@
 extern crate bit_vec;
 extern crate ndarray;
+extern crate num_traits;
 extern crate rand;
 
 use bit_vec::*;
@@ -7,7 +8,10 @@ use ndarray::*;
 
 /// Preforms the hungarian algorithum on a matrix of costs to find
 /// the assignment with the minimal overall cost.
-pub fn hungarian_algorithum(mut data: Array2<i32>) -> Vec<(usize, usize)> {
+pub fn hungarian_algorithum<T>(mut data: Array2<T>) -> Vec<(usize, usize)>
+where
+    T: num_traits::NumAssign + std::cmp::Ord + ScalarOperand + Copy,
+{
     // TODO: check for max - min = overflow
 
     let (tmp_rows, tmp_cols) = data.dim();
@@ -21,19 +25,13 @@ pub fn hungarian_algorithum(mut data: Array2<i32>) -> Vec<(usize, usize)> {
     let (rows, cols) = data.dim();
     // Reduce each row by it's minimum value
     for mut row in data.axis_iter_mut(Axis(0)) {
-        let minimum = match row.iter().min() {
-            Some(min) => *min,
-            None => 0,
-        };
+        let minimum = *row.iter().min().unwrap_or(&T::zero());
         row -= minimum;
     }
     // If it's a square matrix also reduce each column by it's minimum value
     if rows == cols {
         for mut col in data.axis_iter_mut(Axis(1)) {
-            let minimum = match col.iter().min() {
-                Some(x) => *x,
-                None => 0,
-            };
+            let minimum = *col.iter().min().unwrap_or(&T::zero());
             col -= minimum;
         }
     }
@@ -45,7 +43,7 @@ pub fn hungarian_algorithum(mut data: Array2<i32>) -> Vec<(usize, usize)> {
 
     // Assign as many zeros as possible using a basic search
     for ((row, col), &element) in data.indexed_iter() {
-        if element == 0 && !covered_cols[col] && (assigned_zeros[row] == cols) {
+        if element == T::zero() && !covered_cols[col] && (assigned_zeros[row] == cols) {
             assigned_zeros[row] = col;
             covered_cols.set(col, true);
         }
@@ -70,7 +68,7 @@ pub fn hungarian_algorithum(mut data: Array2<i32>) -> Vec<(usize, usize)> {
         // Prime an non covered zero
         // To optimize only search uncovered rows
         for ((row, col), &element) in data.indexed_iter() {
-            if element == 0 && !covered_rows[row] && !covered_cols[col] {
+            if element == T::zero() && !covered_rows[row] && !covered_cols[col] {
                 did_change = true;
                 if assigned_zeros[row] == cols {
                     // Follow path and reassign zeros
@@ -142,29 +140,38 @@ pub fn hungarian_algorithum(mut data: Array2<i32>) -> Vec<(usize, usize)> {
     }
 }
 
-fn reduce(data: &mut Array2<i32>, (covered_rows, covered_cols): (&BitVec, &BitVec)) {
-    let mut minimum: i32 = std::i32::MAX;
+fn reduce<T>(data: &mut Array2<T>, (covered_rows, covered_cols): (&BitVec, &BitVec))
+where
+    T: num_traits::NumAssign + std::cmp::Ord + ScalarOperand + Copy,
+{
+    let mut minimum: Option<T> = None;
     for ((row, col), &element) in data.indexed_iter() {
-        if !covered_rows[row] && !covered_cols[col] && (element < minimum) {
-            minimum = element;
+        if !covered_rows[row] && !covered_cols[col] {
+            match minimum {
+                None => minimum = Some(element),
+                Some(min) if min > element => minimum = Some(element),
+                _ => (),
+            }
         }
     }
 
-    if minimum == 0 || minimum == std::i32::MAX {
-        panic!("{:?},{:?}", covered_rows, covered_cols);
-    }
-
-    let add_to_assigned_rows: Array1<i32> = covered_cols
-        .iter()
-        .map(|x| if x { minimum } else { 0 })
-        .collect();
-    let add_to_unassigned_rows: Array1<i32> = &add_to_assigned_rows - minimum;
-    for (i, mut row) in data.outer_iter_mut().enumerate() {
-        // could be done with a zip with covered_rows
-        if covered_rows[i] == true {
-            row += &add_to_assigned_rows;
-        } else {
-            row += &add_to_unassigned_rows;
+    match minimum {
+        None => panic!("{:?},{:?}", covered_rows, covered_cols),
+        Some(min) if min == T::zero() => panic!("{:?},{:?}", covered_rows, covered_cols),
+        Some(min) => {
+            let add_to_assigned_rows: Array1<T> = covered_cols
+                .iter()
+                .map(|x| if x { min } else { T::zero() })
+                .collect();
+            let add_to_unassigned_rows: Array1<T> = &add_to_assigned_rows - min;
+            for (i, mut row) in data.outer_iter_mut().enumerate() {
+                // could be done with a zip with covered_rows
+                if covered_rows[i] == true {
+                    row += &add_to_assigned_rows;
+                } else {
+                    row += &add_to_unassigned_rows;
+                }
+            }
         }
     }
 }
@@ -174,8 +181,11 @@ mod tests {
     use super::*;
 
     // add support for large numbers
-    fn get_cost(data: &Array2<i32>, assigned_cells: Vec<(usize, usize)>) -> i32 {
-        let mut cost: i32 = 0;
+    fn get_cost<T>(data: &Array2<T>, assigned_cells: Vec<(usize, usize)>) -> T
+    where
+        T: num_traits::NumAssign + Copy,
+    {
+        let mut cost = T::zero();
         for (row, col) in assigned_cells {
             cost += data[[row, col]];
         }
@@ -216,7 +226,6 @@ mod tests {
             [19, 38, 78, 23, 18, 9, 23, 42, 32]
         ];
         let expected_result = 68;
-        print!("{:?}", hungarian_algorithum(test_data.clone()));
         let test_result = get_cost(&test_data, hungarian_algorithum(test_data.clone()));
         assert_eq!(expected_result, test_result);
     }
